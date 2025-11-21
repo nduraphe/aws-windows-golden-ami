@@ -110,13 +110,11 @@ build {
       "Write-Host '=== Preparing system ==='",
       "New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null",
 
-      Write-Host '=== Installing AWS CLI v2 ==='
-      $cliInstaller = 'C:\Temp\AWSCLIV2.msi'
-      Invoke-WebRequest -Uri "https://awscli.amazonaws.com/AWSCLIV2.msi" -OutFile $cliInstaller
-      Start-Process msiexec.exe -ArgumentList "/i $cliInstaller /qn" -Wait
-
-      # verify
-      aws --version | Write-Host
+      "Write-Host '=== Installing AWS CLI v2 ==='",
+      "$cliInstaller = 'C:\\Temp\\AWSCLIV2.msi'",
+      "Invoke-WebRequest -Uri 'https://awscli.amazonaws.com/AWSCLIV2.msi' -OutFile $cliInstaller",
+      "Start-Process msiexec.exe -ArgumentList '/i C:\\Temp\\AWSCLIV2.msi /qn' -Wait",
+      "aws --version | Write-Host",
 
       "Write-Host '=== Downloading install YAML from S3 ==='",
       "$yamlPath = 'C:\\install.yml'",
