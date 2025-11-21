@@ -54,18 +54,18 @@ source "amazon-ebs" "windows" {
 
   ami_name = "windows-${var.server_type}-golden-ami-{{timestamp}}"
 
-  communicator             = "winrm"
-  winrm_username           = "Administrator"
-  winrm_password           = "PackerPassword@123"
-  winrm_port               = 5985
-  winrm_use_ssl            = false
+  communicator   = "winrm"
+  winrm_username = "Administrator"
+  winrm_password = "PackerPassword@123"
+  winrm_port     = 5985
+  winrm_use_ssl  = false
 
-  user_data_file           = "scripts/winrm-userdata.ps1"
+  user_data_file = "scripts/winrm-userdata.ps1"
 
-  iam_instance_profile     = "GoldenAmiBuilderRole"
+  iam_instance_profile = "GoldenAmiBuilderRole"
 
-  security_group_ids       = ["sg-08a23ad128e577f24"]
-  subnet_id                = "subnet-0b3c8ac9c163bb072"
+  security_group_ids          = ["sg-08a23ad128e577f24"]
+  subnet_id                   = "subnet-0b3c8ac9c163bb072"
   associate_public_ip_address = true
 
   source_ami_filter {
@@ -84,9 +84,10 @@ source "amazon-ebs" "windows" {
 }
 
 build {
-  name = "windows-golden-${var.server_type}"
+  name    = "windows-golden-${var.server_type}"
   sources = ["source.amazon-ebs.windows"]
 
+  # === SOFTWARE INSTALL WITH LOGGING ===
   provisioner "powershell" {
     environment_vars = [
       "S3_BUCKET=${var.software_bucket}",
@@ -95,6 +96,9 @@ build {
 
     inline = [
       "$ErrorActionPreference='Stop'",
+
+      "Write-Host '=== Starting Transcript ==='",
+      "Start-Transcript -Path 'C:\\Temp\\packer_install_log.txt' -Append",
 
       "Write-Host '=== Preparing system ==='",
       "New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null",
@@ -111,27 +115,49 @@ build {
       "Install-Module -Name powershell-yaml -Force -Scope AllUsers",
 
       "$yaml = Get-Content $yamlPath | ConvertFrom-Yaml",
+      "Write-Host 'YAML content loaded:'",
+      "$yaml.software | ConvertTo-Json | Write-Host",
 
       "foreach ($item in $yaml.software) {",
+      "   Write-Host '---------------------------------------------'",
       "   Write-Host 'Installing:' $item.name",
+      "   Write-Host 'S3 Path:' $item.s3_path",
+      "   Write-Host 'Installer:' $item.installer",
+      "   Write-Host 'Args:' $item.silent_args",
 
       "   $s3File = 's3://'+$env:S3_BUCKET+'/'+$item.s3_path",
       "   $localFile = 'C:\\Temp\\'+$item.installer",
 
-      "   Write-Host 'Downloading installer:' $s3File",
-      "   aws s3 cp $s3File $localFile",
+      "   Write-Host 'Downloading installer from S3...'",
+      "   aws s3 cp $s3File $localFile | Write-Host",
 
-      "   Write-Host 'Executing installer:' $item.installer",
-      "   Start-Process -FilePath $localFile -ArgumentList $item.silent_args -Wait",
+      "   Write-Host 'Running installer...'",
+      "   $process = Start-Process -FilePath $localFile -ArgumentList $item.silent_args -PassThru -Wait",
+      "   Write-Host 'Installer Exit Code:' $process.ExitCode",
 
-      "   Write-Host 'Completed installation of' $item.name",
+      "   if ($process.ExitCode -ne 0) { Write-Host 'ERROR: Installation failed for' $item.name }",
       "}",
-      
-      "Write-Host '=== All installations completed ==='"
+
+      "Write-Host '=== All installations completed ==='",
+
+      "Stop-Transcript"
     ]
   }
 
+  # === PRINT LOGS BEFORE TERMINATION ===
+  provisioner "powershell" {
+    inline = [
+      "Write-Host '=== Printing software installation logs from EC2 ==='",
+      "if (Test-Path 'C:\\Temp\\packer_install_log.txt') {",
+      "   Get-Content -Path 'C:\\Temp\\packer_install_log.txt' | Write-Host",
+      "} else {",
+      "   Write-Host 'Log file not found: C:\\Temp\\packer_install_log.txt'",
+      "}",
+      "Write-Host '=== End of software installation logs ==='"
+    ]
+  }
 
+  # === CLEANUP BLOCK ===
   provisioner "powershell" {
     inline = [
       "Write-Host 'Cleaning up temporary files...'",
