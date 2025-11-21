@@ -33,8 +33,8 @@ variable "share_account_ids" {
 
 locals {
   script_map = {
-    member_server     = "windows/scripts/member_server_software_install.yml"
-    domain_controller = "windows/scripts/domain_controller_software_install.yml"
+    member_server     = "windows/scripts/member_server_software_install.ps1"
+    domain_controller = "windows/scripts/domain_controller_software_install.ps1"
   }
 
   selected_script_key = local.script_map[var.server_type]
@@ -71,7 +71,7 @@ source "amazon-ebs" "windows" {
   # IMDSv2 mandatory
   metadata_options {
     http_endpoint               = "enabled"
-    http_tokens                 = "required"  # forces IMDSv2
+    http_tokens                 = "required"
     http_put_response_hop_limit = 2
   }
 
@@ -94,7 +94,7 @@ build {
   name    = "windows-golden-${var.server_type}"
   sources = ["source.amazon-ebs.windows"]
 
-  # === SOFTWARE INSTALL WITH LOGGING ===
+  # === SOFTWARE INSTALL WITH LOGGING (PS1 SCRIPT METHOD) ===
   provisioner "powershell" {
     environment_vars = [
       "S3_BUCKET=${var.software_bucket}",
@@ -113,52 +113,19 @@ build {
       "Write-Host '=== Installing AWS CLI v2 ==='",
       "Invoke-WebRequest -Uri 'https://awscli.amazonaws.com/AWSCLIV2.msi' -OutFile 'C:\\Temp\\AWSCLIV2.msi'",
       "Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i C:\\Temp\\AWSCLIV2.msi /qn /norestart' -Wait",
-      "Write-Host 'Checking AWS CLI installation path...'",
+
       "if (Test-Path 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe') {",
       "   Write-Host 'AWS CLI installed successfully.'",
       "   & 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe' --version | Write-Host",
-      "} else {",
-      "   Write-Host 'ERROR: AWS CLI did not install properly!'",
-      "   exit 1",
-      "}",
+      "} else { Write-Host 'AWS CLI install failed'; exit 1 }",
 
-      "Write-Host '=== Downloading install YAML from S3 ==='",
-      "$yamlPath = 'C:\\install.yml'",
-      "& 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe' s3 cp ('s3://'+$env:S3_BUCKET+'/'+$env:S3_SCRIPT_KEY) $yamlPath",
+      "Write-Host '=== Downloading install script from S3 ==='",
+      "& 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe' s3 cp ('s3://'+$env:S3_BUCKET+'/'+$env:S3_SCRIPT_KEY) 'C:\\install.ps1'",
 
+      "Write-Host '=== Running install script ==='",
+      "powershell.exe -ExecutionPolicy Bypass -File C:\\install.ps1",
 
-      "Write-Host 'Install YAML saved to:' $yamlPath",
-
-      "Write-Host '=== Parsing YAML ==='",
-      "Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted",
-      "Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force",
-      "Install-Module -Name powershell-yaml -Force -Scope AllUsers",
-
-      "$yaml = Get-Content $yamlPath | ConvertFrom-Yaml",
-      "Write-Host 'YAML content loaded:'",
-      "$yaml.software | ConvertTo-Json | Write-Host",
-
-      "foreach ($item in $yaml.software) {",
-      "   Write-Host '---------------------------------------------'",
-      "   Write-Host 'Installing:' $item.name",
-      "   Write-Host 'S3 Path:' $item.s3_path",
-      "   Write-Host 'Installer:' $item.installer",
-      "   Write-Host 'Args:' $item.silent_args",
-
-      "   $s3File = 's3://'+$env:S3_BUCKET+'/'+$item.s3_path",
-      "   $localFile = 'C:\\Temp\\'+$item.installer",
-
-      "   Write-Host 'Downloading installer from S3...'",
-      "   aws s3 cp $s3File $localFile | Write-Host",
-
-      "   Write-Host 'Running installer...'",
-      "   $process = Start-Process -FilePath $localFile -ArgumentList $item.silent_args -PassThru -Wait",
-      "   Write-Host 'Installer Exit Code:' $process.ExitCode",
-
-      "   if ($process.ExitCode -ne 0) { Write-Host 'ERROR: Installation failed for' $item.name }",
-      "}",
-
-      "Write-Host '=== All installations completed ==='",
+      "Write-Host '=== Script execution completed ==='",
 
       "Stop-Transcript"
     ]
@@ -169,11 +136,9 @@ build {
     inline = [
       "Write-Host '=== Printing software installation logs from EC2 ==='",
       "if (Test-Path 'C:\\Temp\\packer_install_log.txt') {",
-      "   Get-Content -Path 'C:\\Temp\\packer_install_log.txt' | Write-Host",
-      "} else {",
-      "   Write-Host 'Log file not found: C:\\Temp\\packer_install_log.txt'",
-      "}",
-      "Write-Host '=== End of software installation logs ==='"
+      " Get-Content -Path 'C:\\Temp\\packer_install_log.txt' | Write-Host",
+      "} else { Write-Host 'Log file not found: C:\\Temp\\packer_install_log.txt' }",
+      "Write-Host '=== End of logs ==='"
     ]
   }
 
@@ -181,7 +146,8 @@ build {
   provisioner "powershell" {
     inline = [
       "Write-Host 'Cleaning up temporary files...'",
-      "Remove-Item -Force C:\\install.yml -ErrorAction SilentlyContinue"
+      "Remove-Item -Force C:\\install.ps1 -ErrorAction SilentlyContinue",
+      "Remove-Item -Force C:\\Temp\\AWSCLIV2.msi -ErrorAction SilentlyContinue"
     ]
   }
 }
