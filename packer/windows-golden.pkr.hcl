@@ -52,7 +52,7 @@ source "amazon-ebs" "windows" {
   region                   = var.aws_region
   instance_type            = "t3.large"
 
-  ami_name = "win-${var.server_type}-golden-ami-{{timestamp}}"
+  ami_name = "windows-${var.server_type}-golden-ami-{{timestamp}}"
 
   communicator             = "winrm"
   winrm_username           = "Administrator"
