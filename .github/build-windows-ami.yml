@@ -1,0 +1,55 @@
+name: Build Windows Golden AMI
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_type:
+        description: "Choose Windows Server type"
+        required: true
+        type: choice
+        options:
+          - member_server
+          - domain_controller
+
+jobs:
+  build-ami:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-west-2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install Packer
+        uses: hashicorp/setup-packer@v3
+        with:
+          version: "1.11.0"
+
+      - name: Packer Init
+        working-directory: packer
+        run: packer init windows-golden.pkr.hcl
+
+      - name: Packer Validate
+        working-directory: packer
+        run: |
+          packer validate \
+            -var "server_type=${{ github.event.inputs.server_type }}" \
+            -var "software_bucket=golden-ami-softwares-nagesh" \
+            windows-golden.pkr.hcl
+
+      - name: Packer Build
+        working-directory: packer
+        run: |
+          packer build \
+            -var "server_type=${{ github.event.inputs.server_type }}" \
+            -var "software_bucket=golden-ami-softwares-nagesh" \
+            windows-golden.pkr.hcl
