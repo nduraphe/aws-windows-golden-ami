@@ -62,7 +62,7 @@ source "amazon-ebs" "windows" {
 
   user_data_file           = "scripts/winrm-userdata.ps1"
 
-  instanceProfileName     = "GoldenAmiBuilderRole"
+  iam_instance_profile     = "GoldenAmiBuilderRole"
 
   security_group_ids       = ["sg-08a23ad128e577f24"]
   subnet_id                = "subnet-0b3c8ac9c163bb072"
