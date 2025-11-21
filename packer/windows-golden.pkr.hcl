@@ -62,8 +62,8 @@ source "amazon-ebs" "windows" {
 
   iam_instance_profile     = "arn:aws:iam::284495578504:instance-profile/GoldenAmiBuilderRole"
 
-  security_group_ids       = ["sg-xxxxxxxx"]
-  subnet_id                = "subnet-xxxxxxxx"
+  security_group_ids       = ["sg-08a23ad128e577f24"]
+  subnet_id                = "subnet-0b3c8ac9c163bb072"
   associate_public_ip_address = true
 
   source_ami_filter {
