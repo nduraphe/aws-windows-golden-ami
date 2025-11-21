@@ -68,6 +68,13 @@ source "amazon-ebs" "windows" {
   subnet_id                   = "subnet-0b3c8ac9c163bb072"
   associate_public_ip_address = true
 
+  # IMDSv2 mandatory
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"  # forces IMDSv2
+    http_put_response_hop_limit = 2
+  }
+
   source_ami_filter {
     filters = {
       name                = "Windows_Server-2022-English-Full-Base-*"
