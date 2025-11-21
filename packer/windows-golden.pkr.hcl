@@ -12,7 +12,7 @@ packer {
 variable "aws_region" {
   type        = string
   description = "AWS region where AMI will be built"
-  default     = "us-west-2"
+  default     = "us-east-1"
 }
 
 variable "server_type" {
@@ -70,7 +70,7 @@ source "amazon-ebs" "windows" {
 
   source_ami_filter {
     filters = {
-      name                = "Windows_Server-2019-English-Full-Base-*"
+      name                = "Windows_Server-2022-English-Full-Base-*"
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
