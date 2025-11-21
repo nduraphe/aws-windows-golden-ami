@@ -124,7 +124,8 @@ build {
 
       "Write-Host '=== Downloading install YAML from S3 ==='",
       "$yamlPath = 'C:\\install.yml'",
-      "aws s3 cp ('s3://'+$env:S3_BUCKET+'/'+$env:S3_SCRIPT_KEY) $yamlPath",
+      "& 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe' s3 cp ('s3://'+$env:S3_BUCKET+'/'+$env:S3_SCRIPT_KEY) $yamlPath",
+
 
       "Write-Host 'Install YAML saved to:' $yamlPath",
 
