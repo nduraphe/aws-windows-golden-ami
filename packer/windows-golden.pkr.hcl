@@ -94,6 +94,9 @@ build {
     inline = [
       "$ErrorActionPreference='Stop'",
 
+      "Write-Host '=== Preparing system ==='",
+      "New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null",
+
       "Write-Host '=== Downloading install YAML from S3 ==='",
       "$yamlPath = 'C:\\install.yml'",
       "aws s3 cp ('s3://'+$env:S3_BUCKET+'/'+$env:S3_SCRIPT_KEY) $yamlPath",
@@ -101,7 +104,10 @@ build {
       "Write-Host 'Install YAML saved to:' $yamlPath",
 
       "Write-Host '=== Parsing YAML ==='",
+      "Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted",
+      "Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force",
       "Install-Module -Name powershell-yaml -Force -Scope AllUsers",
+
       "$yaml = Get-Content $yamlPath | ConvertFrom-Yaml",
 
       "foreach ($item in $yaml.software) {",
@@ -122,6 +128,7 @@ build {
       "Write-Host '=== All installations completed ==='"
     ]
   }
+
 
   provisioner "powershell" {
     inline = [
