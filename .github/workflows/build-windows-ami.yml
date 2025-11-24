@@ -15,18 +15,22 @@ on:
       custom_name:
         description: "Custom server type name (only when server_type=custom)"
         required: false
+        default: ""
 
       custom_bucket:
-        description: "Custom S3 bucket name for software/scripts"
+        description: "Custom S3 bucket name for software/scripts (only when server_type=custom)"
         required: false
+        default: ""
 
       custom_script:
-        description: "Custom script key/path under the S3 bucket"
+        description: "Custom script key/path under the S3 bucket (only when server_type=custom)"
         required: false
+        default: ""
 
       share_account_ids:
         description: "Comma-separated AWS account IDs to share AMI with (optional)"
         required: false
+        default: ""
 
 jobs:
   build-ami:
