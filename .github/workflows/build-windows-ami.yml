@@ -172,7 +172,7 @@ jobs:
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
             -var "manual_script_key=${{ steps.vars.outputs.manual_script_key }}" \
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
-            windows-golden.pkr.hcl
+            .
 
       - name: Build Windows Golden AMI
         working-directory: packer
@@ -183,4 +183,4 @@ jobs:
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
             -var "manual_script_key=${{ steps.vars.outputs.manual_script_key }}" \
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
-            windows-golden.pkr.hcl
+            .
