@@ -65,6 +65,7 @@ jobs:
 
           # Convert comma-separated share_account_ids → HCL list
           RAW_ACCOUNTS="${{ github.event.inputs.share_account_ids }}"
+
           if [ -z "$RAW_ACCOUNTS" ]; then
             SHARE="[]"
           else
@@ -72,10 +73,21 @@ jobs:
             IFS=',' read -r -a ARR <<< "$RAW_CLEAN"
 
             SHARE="["
+
             for i in "${!ARR[@]}"; do
+              ID="${ARR[$i]}"
+
+              # Validate AWS account ID (must be 12 digits)
+              if ! [[ "$ID" =~ ^[0-9]{12}$ ]]; then
+                echo "❌ Invalid AWS account ID: $ID"
+                echo "All account IDs must be 12-digit numeric."
+                exit 1
+              fi
+
               [[ $i -gt 0 ]] && SHARE+=", "
-              SHARE+="\"${ARR[$i]}\""
+              SHARE+="\"$ID\""
             done
+
             SHARE+="]"
           fi
 
@@ -83,10 +95,31 @@ jobs:
 
           # Custom Server Handling
           if [ "$TYPE" = "custom" ]; then
-            if [ -z "${{ github.event.inputs.custom_name }}" ] \
-              || [ -z "${{ github.event.inputs.custom_bucket }}" ] \
-              || [ -z "${{ github.event.inputs.custom_script }}" ]; then
-              echo "❌ Missing required custom fields"
+
+            MISSING=""
+
+            # Check custom_name
+            if [ -z "${{ github.event.inputs.custom_name }}" ]; then
+              MISSING="${MISSING}custom_name "
+            fi
+
+            # Check custom_bucket
+            if [ -z "${{ github.event.inputs.custom_bucket }}" ]; then
+              MISSING="${MISSING}custom_bucket "
+            fi
+
+            # Check custom_script
+            if [ -z "${{ github.event.inputs.custom_script }}" ]; then
+              MISSING="${MISSING}custom_script "
+            fi
+
+            # If anything missing → fail with clear message
+            if [ -n "$MISSING" ]; then
+              echo "❌ ERROR: Missing required custom fields: ${MISSING// /, }"
+              echo "Required when server_type=custom:"
+              echo "  • custom_name"
+              echo "  • custom_bucket"
+              echo "  • custom_script"
               exit 1
             fi
 
