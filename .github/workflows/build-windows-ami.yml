@@ -137,6 +137,14 @@ jobs:
         working-directory: packer
         run: packer init windows-golden.pkr.hcl
 
+      - name: List Packer Directory
+        run: ls -R .
+        working-directory: packer
+
+      - name: Ensure variables file exists
+        run: cat variables.pkr.hcl
+        working-directory: packer
+
       - name: Debug Packer Variable Loading
         working-directory: packer
         run: |
@@ -150,7 +158,6 @@ jobs:
         working-directory: packer
         run: |
           packer validate \
-            -var-file=variables.pkr.hcl \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
@@ -162,7 +169,6 @@ jobs:
         working-directory: packer
         run: |
           packer build \
-            -var-file=variables.pkr.hcl \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
