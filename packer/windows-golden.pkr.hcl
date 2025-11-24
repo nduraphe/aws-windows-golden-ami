@@ -27,9 +27,11 @@ locals {
   # Determine which script to use:
   # - If custom provided → use manual_script_key
   # - Else → use the predefined map
-  selected_script_key = var.manual_script_key != "" ?
-                        var.manual_script_key :
-                        local.script_map[var.server_type]
+  selected_script_key = (
+                          var.manual_script_key != "" ?
+                          var.manual_script_key :
+                          local.script_map[var.server_type]
+                        )
 
   # Standard tags applied to AMI, snapshot, and the build instance
   common_tags = {
