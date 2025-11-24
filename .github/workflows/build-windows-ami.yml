@@ -4,12 +4,29 @@ on:
   workflow_dispatch:
     inputs:
       server_type:
-        description: "Choose Windows Server type"
+        description: "Select Windows server type or choose custom"
         required: true
         type: choice
         options:
           - member_server
           - domain_controller
+          - custom
+
+      custom_name:
+        description: "Custom server type name (only when server_type=custom)"
+        required: false
+
+      custom_bucket:
+        description: "Custom S3 bucket name for software/scripts"
+        required: false
+
+      custom_script:
+        description: "Custom script key/path under the S3 bucket"
+        required: false
+
+      share_account_ids:
+        description: "Comma-separated AWS account IDs to share AMI with (optional)"
+        required: false
 
 jobs:
   build-ami:
@@ -17,8 +34,10 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
+      DEFAULT_BUCKET: golden-ami-softwares-nagesh
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -29,27 +48,76 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install Packer
+      - name: Install Latest Packer
         uses: hashicorp/setup-packer@v3
         with:
-          version: "1.11.0"
+          version: "latest"
+
+      - name: Prepare Build Variables
+        id: vars
+        run: |
+          # Selected server type
+          TYPE="${{ github.event.inputs.server_type }}"
+
+          # Convert comma-separated share_account_ids → HCL list
+          RAW_ACCOUNTS="${{ github.event.inputs.share_account_ids }}"
+          if [ -z "$RAW_ACCOUNTS" ]; then
+            SHARE="[]"
+          else
+            RAW_CLEAN=$(echo "$RAW_ACCOUNTS" | tr -d ' ')
+            IFS=',' read -r -a ARR <<< "$RAW_CLEAN"
+
+            SHARE="["
+            for i in "${!ARR[@]}"; do
+              [[ $i -gt 0 ]] && SHARE+=", "
+              SHARE+="\"${ARR[$i]}\""
+            done
+            SHARE+="]"
+          fi
+
+          echo "share_account_ids=$SHARE" >> $GITHUB_OUTPUT
+
+          # Custom Server Handling
+          if [ "$TYPE" = "custom" ]; then
+            if [ -z "${{ github.event.inputs.custom_name }}" ] \
+              || [ -z "${{ github.event.inputs.custom_bucket }}" ] \
+              || [ -z "${{ github.event.inputs.custom_script }}" ]; then
+              echo "❌ Missing required custom fields"
+              exit 1
+            fi
+
+            echo "server_type=${{ github.event.inputs.custom_name }}" >> $GITHUB_OUTPUT
+            echo "software_bucket=${{ github.event.inputs.custom_bucket }}" >> $GITHUB_OUTPUT
+            echo "manual_script_key=${{ github.event.inputs.custom_script }}" >> $GITHUB_OUTPUT
+
+          else
+            echo "server_type=$TYPE" >> $GITHUB_OUTPUT
+            echo "software_bucket=${{ env.DEFAULT_BUCKET }}" >> $GITHUB_OUTPUT
+            echo "manual_script_key=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Packer Init
         working-directory: packer
         run: packer init windows-golden.pkr.hcl
 
-      - name: Packer Validate
+      - name: Validate Packer Template
         working-directory: packer
         run: |
           packer validate \
-            -var "server_type=${{ github.event.inputs.server_type }}" \
-            -var "software_bucket=golden-ami-softwares-nagesh" \
+            -var "aws_region=${{ env.AWS_REGION }}" \
+            -var "server_type=${{ steps.vars.outputs.server_type }}" \
+            -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
+            -var "manual_script_key=${{ steps.vars.outputs.manual_script_key }}" \
+            -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
             windows-golden.pkr.hcl
 
-      - name: Packer Build
+      - name: Build Windows Golden AMI
         working-directory: packer
         run: |
           packer build \
-            -var "server_type=${{ github.event.inputs.server_type }}" \
-            -var "software_bucket=golden-ami-softwares-nagesh" \
+            -var "aws_region=${{ env.AWS_REGION }}" \
+            -var "server_type=${{ steps.vars.outputs.server_type }}" \
+            -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
+            -var "manual_script_key=${{ steps.vars.outputs.manual_script_key }}" \
+            -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
             windows-golden.pkr.hcl

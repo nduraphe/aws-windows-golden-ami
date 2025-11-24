@@ -1,44 +1,37 @@
+###############################################################
+# PACKER CONFIGURATION
+###############################################################
+
 packer {
   required_version = ">= 1.11.0"
 
   required_plugins {
     amazon = {
       source  = "github.com/hashicorp/amazon"
-      version = ">= 1.3.0"
+      version = ">= 1.6.0"
     }
   }
 }
 
-variable "aws_region" {
-  type        = string
-  description = "AWS region where AMI will be built"
-  default     = "us-east-1"
-}
-
-variable "server_type" {
-  type        = string
-  description = "Type of server to build (member_server or domain_controller)"
-}
-
-variable "software_bucket" {
-  type        = string
-  description = "S3 bucket containing install scripts and software"
-}
-
-variable "share_account_ids" {
-  type        = list(string)
-  description = "AWS accounts to share AMI with"
-  default     = []
-}
+###############################################################
+# LOCAL VALUES
+###############################################################
 
 locals {
+  # Predefined script paths stored in S3
   script_map = {
     member_server     = "windows/scripts/member_server_software_install.ps1"
     domain_controller = "windows/scripts/domain_controller_software_install.ps1"
   }
 
-  selected_script_key = local.script_map[var.server_type]
+  # Determine which script to use:
+  # - If custom provided → use manual_script_key
+  # - Else → use the predefined map
+  selected_script_key = var.manual_script_key != "" ?
+                        var.manual_script_key :
+                        local.script_map[var.server_type]
 
+  # Standard tags applied to AMI, snapshot, and the build instance
   common_tags = {
     Project     = "GoldenAMI"
     ManagedBy   = "Packer"
@@ -48,40 +41,45 @@ locals {
   }
 }
 
-source "amazon-ebs" "windows" {
-  region                   = var.aws_region
-  instance_type            = "t3.large"
+###############################################################
+# SOURCE BUILDER: AMAZON EBS
+###############################################################
 
-  ami_name = "windows-${var.server_type}-golden-ami-{{timestamp}}"
+source "amazon-ebs" "windows" {
+  region        = var.aws_region
+  instance_type = var.instance_type
+
+  ami_name  = "Golden-AMI-${var.server_type}-${formatdate("YYMMDD'T'HHmm'Z'", timestamp())}"
+  ami_users = var.share_account_ids
 
   communicator   = "winrm"
   winrm_username = "Administrator"
-  winrm_password = "PackerPassword@123"
+  winrm_password = var.winrm_password
   winrm_port     = 5985
   winrm_use_ssl  = false
 
-  user_data_file = "scripts/winrm-userdata.ps1"
+  user_data_file = var.user_data_file  # WinRM bootstrap script
 
-  iam_instance_profile = "GoldenAmiBuilderRole"
+  iam_instance_profile = var.instance_profile
 
-  security_group_ids          = ["sg-08a23ad128e577f24"]
-  subnet_id                   = "subnet-0b3c8ac9c163bb072"
-  associate_public_ip_address = true
+  security_group_ids          = var.security_group_ids
+  subnet_id                   = var.subnet_id
+  associate_public_ip_address = var.associate_public_ip
 
-  # IMDSv2 mandatory
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 2
   }
 
+  # Base Windows AMI selection
   source_ami_filter {
     filters = {
-      name                = "Windows_Server-2022-English-Full-Base-*"
+      name                = var.base_ami_name_filter
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }
-    owners      = ["801119661308"]
+    owners      = var.base_ami_owners
     most_recent = true
   }
 
@@ -90,11 +88,18 @@ source "amazon-ebs" "windows" {
   run_tags      = local.common_tags
 }
 
+###############################################################
+# BUILD STEPS
+###############################################################
+
 build {
   name    = "windows-golden-${var.server_type}"
   sources = ["source.amazon-ebs.windows"]
 
-  # === SOFTWARE INSTALL WITH LOGGING (PS1 SCRIPT METHOD) ===
+  ###############################################################
+  # 1. DOWNLOAD AND RUN SOFTWARE INSTALL SCRIPTS FROM S3
+  ###############################################################
+
   provisioner "powershell" {
     environment_vars = [
       "S3_BUCKET=${var.software_bucket}",
@@ -104,50 +109,49 @@ build {
     inline = [
       "$ErrorActionPreference='Stop'",
 
-      "Write-Host '=== Starting Transcript ==='",
+      "Write-Host '=== Initializing Install Process ==='",
+      "New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null",
       "Start-Transcript -Path 'C:\\Temp\\packer_install_log.txt' -Append",
 
-      "Write-Host '=== Preparing system ==='",
-      "New-Item -ItemType Directory -Force -Path 'C:\\Temp' | Out-Null",
-
-      "Write-Host '=== Installing AWS CLI v2 ==='",
+      "Write-Host 'Installing AWS CLI v2...'",
       "Invoke-WebRequest -Uri 'https://awscli.amazonaws.com/AWSCLIV2.msi' -OutFile 'C:\\Temp\\AWSCLIV2.msi'",
-      "Start-Process -FilePath 'msiexec.exe' -ArgumentList '/i C:\\Temp\\AWSCLIV2.msi /qn /norestart' -Wait",
+      "Start-Process 'msiexec.exe' -ArgumentList '/i C:\\Temp\\AWSCLIV2.msi /qn /norestart' -Wait",
 
-      "if (Test-Path 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe') {",
-      "   Write-Host 'AWS CLI installed successfully.'",
-      "   & 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe' --version | Write-Host",
-      "} else { Write-Host 'AWS CLI install failed'; exit 1 }",
-
-      "Write-Host '=== Downloading install script from S3 ==='",
+      "Write-Host 'Downloading install script from S3...'",
       "& 'C:\\Program Files\\Amazon\\AWSCLIV2\\aws.exe' s3 cp ('s3://'+$env:S3_BUCKET+'/'+$env:S3_SCRIPT_KEY) 'C:\\install.ps1'",
 
-      "Write-Host '=== Running install script ==='",
-      "powershell.exe -ExecutionPolicy Bypass -File C:\\install.ps1",
+      "Write-Host 'Running install script...'",
+      "PowerShell.exe -ExecutionPolicy Bypass -File 'C:\\install.ps1'",
 
-      "Write-Host '=== Script execution completed ==='",
-
+      "Write-Host '=== Install Script Completed ==='",
       "Stop-Transcript"
     ]
   }
 
-  # === PRINT LOGS BEFORE TERMINATION ===
+  ###############################################################
+  # 2. PRINT LOGS ON THE CONSOLE
+  ###############################################################
+
   provisioner "powershell" {
     inline = [
-      "Write-Host '=== Printing software installation logs from EC2 ==='",
+      "Write-Host '=== Printing Logs ==='",
       "if (Test-Path 'C:\\Temp\\packer_install_log.txt') {",
-      " Get-Content -Path 'C:\\Temp\\packer_install_log.txt' | Write-Host",
-      "} else { Write-Host 'Log file not found: C:\\Temp\\packer_install_log.txt' }",
-      "Write-Host '=== End of logs ==='"
+      " Get-Content 'C:\\Temp\\packer_install_log.txt' | Write-Host",
+      "} else {",
+      " Write-Host 'Log file missing'",
+      "}"
     ]
   }
 
-  # === CLEANUP BLOCK ===
+  ###############################################################
+  # 3. CLEANUP TEMP FILES
+  ###############################################################
+
   provisioner "powershell" {
     inline = [
       "Write-Host 'Cleaning up temporary files...'",
-      "Remove-Item -Force C:\\install.ps1 -ErrorAction SilentlyContinue",
-      "Remove-Item -Force C:\\Temp\\AWSCLIV2.msi -ErrorAction SilentlyContinue"
+      "Remove-Item -Force 'C:\\install.ps1' -ErrorAction SilentlyContinue",
+      "Remove-Item -Force 'C:\\Temp\\AWSCLIV2.msi' -ErrorAction SilentlyContinue"
     ]
   }
 }
