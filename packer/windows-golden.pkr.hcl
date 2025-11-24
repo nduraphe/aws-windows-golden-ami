@@ -58,7 +58,7 @@ source "amazon-ebs" "windows" {
   winrm_port     = 5985
   winrm_use_ssl  = false
 
-  user_data_file = var.user_data_file  # WinRM bootstrap script
+  user_data_file = var.user_data_file
 
   iam_instance_profile = var.instance_profile
 

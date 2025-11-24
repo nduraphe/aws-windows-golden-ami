@@ -31,7 +31,7 @@ repo-root/
     ├── variables.pkr.hcl
     ├── pkrvars.hcl
     └── scripts/
-        └── winrm-userdata.ps1
+        └── winrm-userdata.yml
 ```
 
 Software install scripts (member_server, domain_controller, custom)  
@@ -58,7 +58,7 @@ Actions → Build Windows Golden AMI → Run workflow
 ```
 custom_name   → Name of server type (example: sql2022)
 custom_bucket → S3 bucket containing script
-custom_script → Path to .ps1 script inside the bucket
+custom_script → Path to .yml script inside the bucket
 ```
 
 ### Optional AMI Sharing

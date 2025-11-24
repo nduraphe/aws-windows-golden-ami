@@ -71,7 +71,7 @@ variable "winrm_password" {
 variable "user_data_file" {
   description = "User-data file used to configure WinRM on the builder EC2"
   type        = string
-  default     = "scripts/winrm-userdata.ps1"
+  default     = "scripts/winrm-userdata.yml"
 }
 
 variable "base_ami_name_filter" {
