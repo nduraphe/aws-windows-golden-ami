@@ -145,6 +145,15 @@ jobs:
         run: cat 00-variables.pkr.hcl
         working-directory: packer
 
+      - name: Show content of windows-golden.pkr.hcl to confirm what Packer sees
+        working-directory: packer
+        run: |
+          echo "===== FILE Packer is using ====="
+          pwd
+          ls -l
+          echo "===== windows-golden.pkr.hcl content ====="
+          sed -n '1,200p' windows-golden.pkr.hcl
+
       - name: Debug Packer Variable Loading
         working-directory: packer
         run: |
