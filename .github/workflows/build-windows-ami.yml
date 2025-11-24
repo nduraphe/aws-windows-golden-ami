@@ -137,6 +137,15 @@ jobs:
         working-directory: packer
         run: packer init windows-golden.pkr.hcl
 
+      - name: Debug Packer Variable Loading
+        working-directory: packer
+        run: |
+          export PACKER_LOG=1
+          export PACKER_LOG_PATH=packer-debug.log
+          packer validate windows-golden.pkr.hcl || true
+          echo "====== PACKER DEBUG LOG ======"
+          cat packer-debug.log
+
       - name: Validate Packer Template
         working-directory: packer
         run: |
