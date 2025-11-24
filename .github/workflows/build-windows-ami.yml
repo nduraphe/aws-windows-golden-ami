@@ -142,7 +142,7 @@ jobs:
         working-directory: packer
 
       - name: Ensure variables file exists
-        run: cat variables-definitions.pkr.hcl
+        run: cat 00-variables.pkr.hcl
         working-directory: packer
 
       - name: Debug Packer Variable Loading
