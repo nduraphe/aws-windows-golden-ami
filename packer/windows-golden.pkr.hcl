@@ -18,6 +18,8 @@ packer {
 ###############################################################
 
 locals {
+  build_time = formatdate("YYMMDD'T'HHmm'Z'", timestamp())
+
   # Predefined script paths stored in S3
   script_map = {
     member_server     = "windows/scripts/member_server_software_install.ps1"
@@ -51,7 +53,7 @@ source "amazon-ebs" "windows" {
   region        = var.aws_region
   instance_type = var.instance_type
 
-  ami_name = "Golden-AMI-${var.server_type}-${formatdate("YYMMDD'T'HHmm'Z'", timestamp())}"
+  ami_name = "Golden-AMI-${var.server_type}-${local.build_time}"
   ami_users = var.share_account_ids
 
   communicator   = "winrm"
