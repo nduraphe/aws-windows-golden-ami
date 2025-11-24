@@ -128,7 +128,7 @@ jobs:
             echo "manual_script_key=${{ github.event.inputs.custom_script }}" >> $GITHUB_OUTPUT
 
           else
-            echo "server_type=$TYPE" >> $GITHUB_OUTPUT
+            echo "server_type=${TYPE}" >> $GITHUB_OUTPUT
             echo "software_bucket=${{ env.DEFAULT_BUCKET }}" >> $GITHUB_OUTPUT
             echo "manual_script_key=" >> $GITHUB_OUTPUT
           fi
