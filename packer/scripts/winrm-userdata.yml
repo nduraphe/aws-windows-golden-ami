@@ -1,35 +1,42 @@
 #cloud-config
-
 runcmd:
   # Set Administrator password
   - net user Administrator "PackerPassword@123"
 
-  # Enable PowerShell Remoting
+  # Enable PS Remoting (creates listeners & firewall rules)
   - powershell -Command "Enable-PSRemoting -Force"
 
-  # WinRM basic HTTP configuration
-  - powershell -Command "winrm quickconfig -force"
+  # WinRM service settings
   - powershell -Command "winrm set winrm/config/service @{AllowUnencrypted='true'}"
   - powershell -Command "winrm set winrm/config/service/auth @{Basic='true'}"
 
-  # Improve WinRM stability
-  - powershell -Command \"winrm set winrm/config @{MaxTimeoutms='1800000'}\"
-  - powershell -Command \"winrm set winrm/config/winrs @{MaxMemoryPerShellMB='2048'}\"
-  - powershell -Command \"Set-Item -Path WSMan:\\localhost\\Service\\Auth\\Basic -Value \$true\"
-  - powershell -Command \"net localgroup 'Remote Management Users' Administrator /add\"
+  # WinRM client settings (needed for Packer)
+  - powershell -Command \"winrm set winrm/config/client @{AllowUnencrypted='true'}\"
+  - powershell -Command \"winrm set winrm/config/client/auth @{Basic='true'}\"
 
-  # Ensure HTTP listener
-  - powershell -Command \"winrm delete winrm/config/Listener?Address=*+Transport=HTTP\" 
-  - powershell -Command \"winrm create winrm/config/Listener?Address=*+Transport=HTTP\"
+  # Increase WinRM timeouts
+  - powershell -Command "winrm set winrm/config @{MaxTimeoutms='1800000'}"
+  - powershell -Command "winrm set winrm/config/winrs @{MaxMemoryPerShellMB='2048'}"
 
-  # Firewall rule
+  # Ensure Administrator has remote management rights
+  - powershell -Command "net localgroup 'Remote Management Users' Administrator /add"
+
+  # Recreate HTTP Listener (safe way)
+  - powershell -Command "
+      $l = winrm enumerate winrm/config/listener |
+           where { $_.Keys -like '*Transport=HTTP*' };
+      if ($l) { winrm delete winrm/config/listener?Address=*+Transport=HTTP };
+      winrm create winrm/config/listener?Address=*+Transport=HTTP
+    "
+
+  # Allow WinRM (5985) through firewall
   - netsh advfirewall firewall add rule name="WinRM 5985" protocol=TCP dir=in action=allow localport=5985
 
-  # Start WinRM service
+  # Restart WinRM
   - powershell -Command "Set-Service WinRM -StartupType Automatic"
-  - powershell -Command "Start-Service WinRM"
+  - powershell -Command "Restart-Service WinRM"
 
-  # Ensure WinRM is fully initialized
-  - powershell -Command "Start-Sleep -Seconds 20"
+  # Give WinRM time to initialize
+  - powershell -Command "Start-Sleep -Seconds 30"
 
-  - echo "WinRM enabled and configured via cloud-config runcmd"
+  - echo "WinRM enabled and configured via cloud-config"
