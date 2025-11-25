@@ -123,15 +123,17 @@ jobs:
               exit 1
             fi
 
-            # Validate custom_name
-            if ! [[ "${{ github.event.inputs.custom_name }}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            # Cleanup + normalize custom_name
+            CUSTOM_NAME_CLEAN=$(echo "${{ github.event.inputs.custom_name }}" | xargs | tr '[:upper:]' '[:lower:]')
+
+            # Validate format
+            if ! [[ "$CUSTOM_NAME_CLEAN" =~ ^[a-z0-9_-]+$ ]]; then
               echo "❌ ERROR: custom_name contains invalid characters!"
-              echo "Allowed characters: letters, numbers, hyphen (-), underscore (_)"
-              echo "You entered: '${{ github.event.inputs.custom_name }}'"
+              echo "Allowed: letters, numbers, hyphen, underscore"
               exit 1
             fi
 
-            echo "server_type=${{ github.event.inputs.custom_name }}" >> $GITHUB_OUTPUT
+            echo "server_type=$CUSTOM_NAME_CLEAN" >> $GITHUB_OUTPUT
             echo "software_bucket=${{ github.event.inputs.custom_bucket }}" >> $GITHUB_OUTPUT
             echo "manual_script_key=${{ github.event.inputs.custom_script }}" >> $GITHUB_OUTPUT
 
@@ -158,6 +160,7 @@ jobs:
                 ;;
               *)
                 echo "❌ ERROR: Unknown server_type: ${{ steps.vars.outputs.server_type }}"
+                echo "Valid types: member_server, domain_controller, or custom"
                 exit 1
                 ;;
             esac
@@ -209,14 +212,18 @@ jobs:
         working-directory: packer
         run: |
           set -e
-          AMI_ID=$(packer build \
+          AMI_OUTPUT=$(mktemp)
+
+          packer build \
             -machine-readable \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
             -var "install_script_key=${{ steps.finalscript.outputs.install_script }}" \
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
-            . | awk -F, '/artifact,0,id/ {print $6}' | sed 's/.*://' )
+            . | tee "$AMI_OUTPUT"
+
+          AMI_ID=$(awk -F, '/artifact,0,id/ {print $6}' "$AMI_OUTPUT" | sed 's/.*://')
 
           echo "AMI_ID=$AMI_ID"
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
