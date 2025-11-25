@@ -8,8 +8,8 @@ on:
         required: true
         type: choice
         options:
-          - member_server
-          - domain_controller
+          - member-server
+          - domain-controller
           - custom
 
       custom_name:
@@ -152,10 +152,10 @@ jobs:
             FINAL_SCRIPT="${{ steps.vars.outputs.manual_script_key }}"
           else
             case "${{ steps.vars.outputs.server_type }}" in
-              member_server)
+              member-server)
                 FINAL_SCRIPT="windows/scripts/member_server_software_install.ps1"
                 ;;
-              domain_controller)
+              domain-controller)
                 FINAL_SCRIPT="windows/scripts/domain_controller_software_install.ps1"
                 ;;
               *)

@@ -9,9 +9,9 @@ variable "aws_region" {
 }
 
 variable "server_type" {
-  description = "Type of server to build (member_server, domain_controller, or custom)"
+  description = "Type of server to build (member-server, domain-controller, or custom)"
   type        = string
-  default     = "member_server"
+  default     = "member-server"
 }
 
 variable "software_bucket" {
