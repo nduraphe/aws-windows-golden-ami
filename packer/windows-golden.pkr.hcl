@@ -26,7 +26,7 @@ locals {
     ManagedBy   = "Packer"
     Creator     = "GitHubActions"
     ServerType  = var.server_type
-    Environment = "Personal"
+    Environment = "POC"
   }
 }
 
@@ -64,7 +64,7 @@ source "amazon-ebs" "windows" {
   # Base Windows AMI selection
   source_ami_filter {
     filters = {
-      name                = var.base_ami_name_filter
+      name                = var.base_ami_name
       root-device-type    = "ebs"
       virtualization-type = "hvm"
     }

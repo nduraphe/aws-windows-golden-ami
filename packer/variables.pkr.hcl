@@ -74,7 +74,7 @@ variable "user_data_file" {
   default     = "scripts/winrm-userdata.ps1"
 }
 
-variable "base_ami_name_filter" {
+variable "base_ami_name" {
   description = "Filter pattern for selecting the base Windows AMI"
   type        = string
   default     = "Windows_Server-2022-English-Full-Base-*"
