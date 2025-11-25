@@ -13,17 +13,17 @@ on:
           - custom
 
       custom_name:
-        description: "Custom server type (only when server_type=custom)"
+        description: "Custom server type (if server_type=custom)"
         required: false
         default: ""
 
       custom_bucket:
-        description: "Custom S3 bucket name for software/scripts (only when server_type=custom)"
+        description: "Custom S3 bucket for software/scripts (if server_type=custom)"
         required: false
         default: ""
 
       custom_script:
-        description: "Custom script path under the S3 bucket (only when server_type=custom)"
+        description: "Custom script path under the S3 bucket (if server_type=custom)"
         required: false
         default: ""
 
@@ -123,6 +123,14 @@ jobs:
               exit 1
             fi
 
+            # Validate custom_name
+            if ! [[ "${{ github.event.inputs.custom_name }}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+              echo "❌ ERROR: custom_name contains invalid characters!"
+              echo "Allowed characters: letters, numbers, hyphen (-), underscore (_)"
+              echo "You entered: '${{ github.event.inputs.custom_name }}'"
+              exit 1
+            fi
+
             echo "server_type=${{ github.event.inputs.custom_name }}" >> $GITHUB_OUTPUT
             echo "software_bucket=${{ github.event.inputs.custom_bucket }}" >> $GITHUB_OUTPUT
             echo "manual_script_key=${{ github.event.inputs.custom_script }}" >> $GITHUB_OUTPUT
@@ -197,12 +205,55 @@ jobs:
             .
 
       - name: Build Windows Golden AMI
+        id: packerbuild
         working-directory: packer
         run: |
-          packer build \
+          set -e
+          AMI_ID=$(packer build \
+            -machine-readable \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
             -var "install_script_key=${{ steps.finalscript.outputs.install_script }}" \
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
-            .
+            . | awk -F, '/artifact,0,id/ {print $6}' | sed 's/.*://' )
+
+          echo "AMI_ID=$AMI_ID"
+          echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
+
+      - name: Store AMI ID in SSM Parameter Store
+        if: success()
+        id: ssmstore
+        run: |
+          AMI_ID="${{ steps.packerbuild.outputs.ami_id }}"
+          SERVER_TYPE="${{ steps.vars.outputs.server_type }}"
+
+          echo "Storing AMI in SSM parameter: /golden-ami/$SERVER_TYPE"
+          echo "AMI: $AMI_ID"
+
+          aws ssm put-parameter \
+            --name "/golden-ami/$SERVER_TYPE" \
+            --type "String" \
+            --value "$AMI_ID" \
+            --overwrite \
+            --region "${{ env.AWS_REGION }}"
+
+          echo "ssm_parameter=/golden-ami/$SERVER_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Publish AMI ID to Summary
+        run: |
+          echo "### 🚀 Golden AMI Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**AMI ID:** \`${{ steps.packerbuild.outputs.ami_id }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** \`${{ env.AWS_REGION }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Server Type:** \`${{ steps.vars.outputs.server_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Software Bucket:** \`${{ steps.vars.outputs.software_bucket }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Install Script:** \`${{ steps.finalscript.outputs.install_script }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Stored in SSM:** \`${{ steps.ssmstore.outputs.ssm_parameter }}\`" >> $GITHUB_STEP_SUMMARY
+
+          # Shared Accounts
+          if [ "${{ steps.vars.outputs.share_account_ids }}" != "[]" ]; then
+            echo "**Shared With Accounts:** \`${{ steps.vars.outputs.share_account_ids }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Shared With Accounts:** _(None)_ " >> $GITHUB_STEP_SUMMARY
+          fi

@@ -38,7 +38,7 @@ source "amazon-ebs" "windows" {
   region        = var.aws_region
   instance_type = var.instance_type
 
-  ami_name = "Golden-AMI-${var.server_type}-${local.build_time}"
+  ami_name = "golden-image-${var.server_type}-${local.build_time}"
   ami_users = var.share_account_ids
 
   communicator   = "winrm"
