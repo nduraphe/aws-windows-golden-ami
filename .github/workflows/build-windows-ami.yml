@@ -42,6 +42,10 @@ jobs:
 
     steps:
 
+      # ================================
+      # Step 1: Checkout + AWS + Packer
+      # ================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -57,14 +61,20 @@ jobs:
         with:
           version: "latest"
 
+
+      # ================================
+      # Step 2: Prepare Build Variables
+      # ================================
+
       - name: Prepare Build Variables
         id: vars
         run: |
+          set -euo pipefail
           # Selected server type
-          TYPE="${{ github.event.inputs.server_type }}"
+          TYPE="${{ inputs.server_type }}"
 
           # Convert comma-separated share_account_ids → HCL list
-          RAW_ACCOUNTS="${{ github.event.inputs.share_account_ids }}"
+          RAW_ACCOUNTS="${{ inputs.share_account_ids }}"
 
           if [ -z "$RAW_ACCOUNTS" ]; then
             SHARE="[]"
@@ -99,17 +109,17 @@ jobs:
             MISSING=""
 
             # Check custom_name
-            if [ -z "${{ github.event.inputs.custom_name }}" ]; then
+            if [ -z "${{ inputs.custom_name }}" ]; then
               MISSING="${MISSING}custom_name "
             fi
 
             # Check custom_bucket
-            if [ -z "${{ github.event.inputs.custom_bucket }}" ]; then
+            if [ -z "${{ inputs.custom_bucket }}" ]; then
               MISSING="${MISSING}custom_bucket "
             fi
 
             # Check custom_script
-            if [ -z "${{ github.event.inputs.custom_script }}" ]; then
+            if [ -z "${{ inputs.custom_script }}" ]; then
               MISSING="${MISSING}custom_script "
             fi
 
@@ -124,7 +134,7 @@ jobs:
             fi
 
             # Cleanup + normalize custom_name
-            CUSTOM_NAME_CLEAN=$(echo "${{ github.event.inputs.custom_name }}" | xargs | tr '[:upper:]' '[:lower:]')
+            CUSTOM_NAME_CLEAN=$(echo "${{ inputs.custom_name }}" | xargs | tr '[:upper:]' '[:lower:]')
 
             # Validate format
             if ! [[ "$CUSTOM_NAME_CLEAN" =~ ^[a-z0-9_-]+$ ]]; then
@@ -134,8 +144,8 @@ jobs:
             fi
 
             echo "server_type=$CUSTOM_NAME_CLEAN" >> $GITHUB_OUTPUT
-            echo "software_bucket=${{ github.event.inputs.custom_bucket }}" >> $GITHUB_OUTPUT
-            echo "manual_script_key=${{ github.event.inputs.custom_script }}" >> $GITHUB_OUTPUT
+            echo "software_bucket=${{ inputs.custom_bucket }}" >> $GITHUB_OUTPUT
+            echo "manual_script_key=${{ inputs.custom_script }}" >> $GITHUB_OUTPUT
 
           else
             echo "server_type=$TYPE" >> $GITHUB_OUTPUT
@@ -143,9 +153,15 @@ jobs:
             echo "manual_script_key=" >> $GITHUB_OUTPUT
           fi
 
+
+      # ================================
+      # Step 3: Resolve Final Script
+      # ================================
+
       - name: Resolving final software install script key
         id: finalscript 
         run: |
+          set -euo pipefail
           echo ""
 
           if [ "${{ steps.vars.outputs.manual_script_key }}" != "" ]; then
@@ -170,8 +186,14 @@ jobs:
           echo "============================================"
           echo ""
 
+        
+      # ================================
+      # Step 4: Validate Packer Config
+      # ================================
+
       - name: Print Final Build Variables
         run: |
+          set -euo pipefail
           echo ""
           echo "============================================"
           echo "           FINAL BUILD VARIABLES"
@@ -190,15 +212,20 @@ jobs:
 
       - name: Packer Init
         working-directory: packer
-        run: packer init windows-golden.pkr.hcl
+        run: |
+          set -euo pipefail
+          packer init windows-golden.pkr.hcl
 
       - name: List Packer Directory
-        run: ls -R .
         working-directory: packer
+        run: |
+          set -euo pipefail
+          ls -R .
 
       - name: Validate Packer Template
         working-directory: packer
         run: |
+          set -euo pipefail
           packer validate \
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
@@ -207,11 +234,16 @@ jobs:
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
             .
 
+
+      # ================================
+      # Step 5: Build AMI
+      # ================================
+
       - name: Build Windows Golden AMI
         id: packerbuild
         working-directory: packer
         run: |
-          set -e
+          set -euo pipefail
           AMI_OUTPUT=$(mktemp)
 
           packer build \
@@ -228,10 +260,16 @@ jobs:
           echo "AMI_ID=$AMI_ID"
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
 
+      
+      # ================================
+      # Step 6: Store AMI in SSM
+      # ================================
+
       - name: Store AMI ID in SSM Parameter Store
         if: success()
         id: ssmstore
         run: |
+          set -euo pipefail
           AMI_ID="${{ steps.packerbuild.outputs.ami_id }}"
           SERVER_TYPE="${{ steps.vars.outputs.server_type }}"
 
@@ -249,6 +287,7 @@ jobs:
 
       - name: Publish AMI ID to Summary
         run: |
+          set -euo pipefail
           echo "### 🚀 Golden AMI Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**AMI ID:** \`${{ steps.packerbuild.outputs.ami_id }}\`" >> $GITHUB_STEP_SUMMARY
