@@ -20,21 +20,6 @@ packer {
 locals {
   build_time = formatdate("YYMMDD'T'HHmm'Z'", timestamp())
 
-  # Predefined script paths stored in S3
-  script_map = {
-    member_server     = "windows/scripts/member_server_software_install.ps1"
-    domain_controller = "windows/scripts/domain_controller_software_install.ps1"
-  }
-
-  # Determine which script to use:
-  # - If custom provided → use manual_script_key
-  # - Else → use the predefined map
-  selected_script_key = (
-                          var.manual_script_key != "" ?
-                          var.manual_script_key :
-                          local.script_map[var.server_type]
-                        )
-
   # Standard tags applied to AMI, snapshot, and the build instance
   common_tags = {
     Project     = "GoldenAMI"
@@ -107,7 +92,7 @@ build {
   provisioner "powershell" {
     environment_vars = [
       "S3_BUCKET=${var.software_bucket}",
-      "S3_SCRIPT_KEY=${local.selected_script_key}"
+      "S3_SCRIPT_KEY=${var.install_script_key}"
     ]
 
     inline = [

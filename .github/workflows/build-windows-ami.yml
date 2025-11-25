@@ -13,7 +13,7 @@ on:
           - custom
 
       custom_name:
-        description: "Custom server type name (only when server_type=custom)"
+        description: "Custom server type (only when server_type=custom)"
         required: false
         default: ""
 
@@ -23,7 +23,7 @@ on:
         default: ""
 
       custom_script:
-        description: "Custom script key/path under the S3 bucket (only when server_type=custom)"
+        description: "Custom script path under the S3 bucket (only when server_type=custom)"
         required: false
         default: ""
 
@@ -133,6 +133,50 @@ jobs:
             echo "manual_script_key=" >> $GITHUB_OUTPUT
           fi
 
+      - name: Resolving final software install script key
+        id: finalscript 
+        run: |
+          echo ""
+
+          if [ "${{ steps.vars.outputs.manual_script_key }}" != "" ]; then
+            FINAL_SCRIPT="${{ steps.vars.outputs.manual_script_key }}"
+          else
+            case "${{ steps.vars.outputs.server_type }}" in
+              member_server)
+                FINAL_SCRIPT="windows/scripts/member_server_software_install.ps1"
+                ;;
+              domain_controller)
+                FINAL_SCRIPT="windows/scripts/domain_controller_software_install.ps1"
+                ;;
+              *)
+                echo "❌ ERROR: Unknown server_type: ${{ steps.vars.outputs.server_type }}"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "install_script=$FINAL_SCRIPT" >> $GITHUB_OUTPUT
+          echo "============================================"
+          echo ""
+
+      - name: Print Final Build Variables
+        run: |
+          echo ""
+          echo "============================================"
+          echo "           FINAL BUILD VARIABLES"
+          echo "============================================"
+
+          printf "| %-20s | %-55s |\n" "VARIABLE" "VALUE"
+          printf "|----------------------|---------------------------------------------------------|\n"
+          printf "| %-20s | %-55s |\n" "AWS_REGION" "${{ env.AWS_REGION }}"
+          printf "| %-20s | %-55s |\n" "SERVER_TYPE" "${{ steps.vars.outputs.server_type }}"
+          printf "| %-20s | %-55s |\n" "SOFTWARE_BUCKET" "${{ steps.vars.outputs.software_bucket }}"
+          printf "| %-20s | %-55s |\n" "INSTALL_SCRIPT" "${{ steps.finalscript.outputs.install_script }}"
+          printf "| %-20s | %-55s |\n" "SHARE_ACCOUNT_IDS" "${{ steps.vars.outputs.share_account_ids }}"
+
+          echo "============================================"
+          echo ""
+
       - name: Packer Init
         working-directory: packer
         run: packer init windows-golden.pkr.hcl
@@ -148,7 +192,7 @@ jobs:
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
-            -var "manual_script_key=${{ steps.vars.outputs.manual_script_key }}" \
+            -var "install_script_key=${{ steps.finalscript.outputs.install_script }}" \
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
             .
 
@@ -159,6 +203,6 @@ jobs:
             -var "aws_region=${{ env.AWS_REGION }}" \
             -var "server_type=${{ steps.vars.outputs.server_type }}" \
             -var "software_bucket=${{ steps.vars.outputs.software_bucket }}" \
-            -var "manual_script_key=${{ steps.vars.outputs.manual_script_key }}" \
+            -var "install_script_key=${{ steps.finalscript.outputs.install_script }}" \
             -var "share_account_ids=${{ steps.vars.outputs.share_account_ids }}" \
             .

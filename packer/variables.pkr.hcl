@@ -20,8 +20,8 @@ variable "software_bucket" {
   default     = "golden-ami-softwares-nagesh"
 }
 
-variable "manual_script_key" {
-  description = "Custom S3 script key for custom server type builds"
+variable "install_script_key" {
+  description = "S3 script key for software installation"
   type        = string
   default     = ""
 }
